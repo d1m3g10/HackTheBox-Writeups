@@ -1,0 +1,24 @@
+# Nmap 7.92 scan initiated Fri Oct 14 14:26:38 2022 as: nmap --script http-enum -p80 -oN blog.travel.htb_webScan blog.travel.htb
+Nmap scan report for blog.travel.htb (10.10.10.189)
+Host is up (0.064s latency).
+rDNS record for 10.10.10.189: travel.htb
+
+PORT   STATE SERVICE
+80/tcp open  http
+| http-enum: 
+|   /wp-login.php: Possible admin folder
+|   /wp-json: Possible admin folder
+|   /robots.txt: Robots file
+|   /readme.html: Wordpress version: 2 
+|   /: WordPress version: 5.4
+|   /feed/: Wordpress version: 5.4
+|   /wp-includes/images/rss.png: Wordpress version 2.2 found.
+|   /wp-includes/js/jquery/suggest.js: Wordpress version 2.5 found.
+|   /wp-includes/images/blank.gif: Wordpress version 2.6 found.
+|   /wp-includes/js/comment-reply.js: Wordpress version 2.7 found.
+|   /wp-login.php: Wordpress login page.
+|   /wp-admin/upgrade.php: Wordpress login page.
+|   /readme.html: Interesting, a readme.
+|_  /0/: Potentially interesting folder
+
+# Nmap done at Fri Oct 14 14:33:55 2022 -- 1 IP address (1 host up) scanned in 436.96 seconds

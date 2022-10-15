@@ -1,0 +1,5 @@
+HOST ldap.travel.htb
+BASE dc=travel,dc=htb
+BINDDN cn=lynik-admin,dc=travel,dc=htb
+
+Theroadlesstraveled

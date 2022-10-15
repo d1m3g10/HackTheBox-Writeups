@@ -1,0 +1,11 @@
+# Nmap 7.92 scan initiated Fri Oct 14 14:33:55 2022 as: nmap --script http-enum -p80 -oN blog-dev.travel.htb_webScan blog-dev.travel.htb
+Nmap scan report for blog-dev.travel.htb (10.10.10.189)
+Host is up (0.038s latency).
+rDNS record for 10.10.10.189: travel.htb
+
+PORT   STATE SERVICE
+80/tcp open  http
+| http-enum: 
+|_  /.git/HEAD: Git folder
+
+# Nmap done at Fri Oct 14 14:38:54 2022 -- 1 IP address (1 host up) scanned in 299.39 seconds

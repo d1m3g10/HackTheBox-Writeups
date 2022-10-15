@@ -1,0 +1,8 @@
+# Nmap 7.92 scan initiated Fri Oct 14 14:22:21 2022 as: nmap --script http-enum -p80 -oN travel.htb_webScan travel.htb
+Nmap scan report for travel.htb (10.10.10.189)
+Host is up (0.042s latency).
+
+PORT   STATE SERVICE
+80/tcp open  http
+
+# Nmap done at Fri Oct 14 14:26:38 2022 -- 1 IP address (1 host up) scanned in 257.28 seconds
